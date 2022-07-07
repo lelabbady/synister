@@ -82,10 +82,7 @@ def create_train_config():
     default_synapse_types = [
         'gaba',
         'acetylcholine',
-        'glutamate',
-        'serotonin',
-        'octopamine',
-        'dopamine']
+        'glutamate']
 
     config = configparser.ConfigParser()
 
@@ -103,7 +100,7 @@ def create_train_config():
     config.set('Training', 'split_name', str(None))
     config.set('Training', 'voxel_size', "40, 4, 4")
     config.set('Training', 'raw_container', "/nrs/saalfeld/FAFB00/v14_align_tps_20170818_dmg.n5")
-    config.set('Training', 'raw_dataset', "volumes/raw/s0")
+    config.set('Training', 'raw_dataset', "gs://zetta_lee_fly_vnc_001_precomputed/vnc1_full_v3align_2/realigned_v1")
     config.set('Training', 'neither_class', 'False')
     config.set('Training', 'downsample_factors', "(1,2,2), (1,2,2), (1,2,2), (2,2,2)")
     config.set('Training', 'network', "VGG")
