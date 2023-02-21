@@ -1,3 +1,4 @@
+
 from gunpowder import *
 from gunpowder.ext import torch
 from gunpowder.torch import *
@@ -7,6 +8,7 @@ import math
 import numpy as np
 import os
 import sys
+from cloudvolume import CloudVolume
 from funlib.learn.torch.models import Vgg3D
 from synister.gp import SynapseSourceMongo, SynapseTypeSource, InspectLabels, AddChannelDim
 from synister.read_config import read_train_config
@@ -62,27 +64,37 @@ def train_until(max_iteration,
     synapse_type = ArrayKey('SYNAPSE_TYPE')
     pred_synapse_type = ArrayKey('PRED_SYNAPSE_TYPE')
 
+    cv_object = CloudVolume(raw_dataset, cache=True, lru_bytes=0, fill_missing=True)
     voxel_size = Coordinate(tuple(voxel_size))
     input_size = input_shape*voxel_size
-
     request = BatchRequest()
     request.add(raw, input_size)
     request.add(synapses, input_size/8)
     request[synapse_type] = ArraySpec(nonspatial=True)
     request[pred_synapse_type] = ArraySpec(nonspatial=True)
 
-    fafb_source = (
-        ZarrSource(
+#    fafb_source = (
+#        ZarrSource(
+#            raw_container,
+#            datasets={raw: raw_dataset},
+#            array_specs={raw: ArraySpec(interpolatable=True, voxel_size=voxel_size)}) +
+#        Normalize(raw) +
+#        Pad(raw, None)
+#    )
+
+    fanc_source = (
+        PrecomputedSource(
             raw_container,
-            datasets={raw: raw_dataset},
+            datasets={raw: cv_object},
             array_specs={raw: ArraySpec(interpolatable=True, voxel_size=voxel_size)}) +
         Normalize(raw) +
         Pad(raw, None)
     )
 
-    sample_sources = tuple(
+
+    fanc_sources = tuple(
         (
-            fafb_source,
+            fanc_source,
             SynapseSourceMongo(
                 db_credentials,
                 db_name_data,
@@ -96,10 +108,11 @@ def train_until(max_iteration,
 
         for t in synapse_types
     )
+
     if neither_class:
         neither_sources = (
             (
-                fafb_source, 
+                fanc_source, 
                 # just provide some synapses, doesn't matter which ones
                 SynapseSourceMongo(
                     db_credentials,
@@ -112,26 +125,33 @@ def train_until(max_iteration,
             MergeProvider() + 
             RandomLocation()
         )
-
+        print('Both sources')
+        print(sample_sources)
+        print('Neither source')
+        print(neither_sources)
+        exit()
         sources = sample_sources + (neither_sources,)
     else:
-        sources = sample_sources
-
+        print('Just fanc sources')
+        print(fanc_sources[0])
+        print('This is synapses')
+        print(synapses)
+        sources = fanc_sources
 
 
     pipeline = (
         sources +
         RandomProvider() +
         ElasticAugment(
-            control_point_spacing=[4,40,40],
-            jitter_sigma=[0,2,2],
+            control_point_spacing=[4,45,45],
+            jitter_sigma=[0,2,2,],
             rotation_interval=[0,math.pi/2.0],
             prob_slip=0.05,
             prob_shift=0.05,
             max_misalign=10,
             subsample=8) +
-        SimpleAugment(transpose_only=[1, 2]) +
-        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True) +
+        SimpleAugment(transpose_only=[1,2]) +
+        IntensityAugment(raw, 0.9, 1.1, -0.1, 0.1, z_section_wise=True,z_slice = 0) +
         IntensityScaleShift(raw, 2,-1) +
         PreCache(
             cache_size=40,
@@ -146,7 +166,7 @@ def train_until(max_iteration,
                 'raw': raw
             },
             target=synapse_type,
-            output=pred_synapse_type,
+            output= pred_synapse_type,
             array_specs={
                 pred_synapse_type: ArraySpec(nonspatial=True)
             },
