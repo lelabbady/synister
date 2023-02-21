@@ -80,6 +80,15 @@ def train_until(max_iteration,
         Pad(raw, None)
     )
 
+    fanc_source = (
+        PrecomputedSource(
+            raw_container,
+            datasets={raw: raw_dataset},
+            array_specs={raw: ArraySpec(interpolatable=True, voxel_size=voxel_size)}) +
+        Normalize(raw) +
+        Pad(raw, None)
+    )
+
     sample_sources = tuple(
         (
             fafb_source,
@@ -96,6 +105,24 @@ def train_until(max_iteration,
 
         for t in synapse_types
     )
+
+    fanc_sources = tuple(
+        (
+            fanc_source,
+            SynapseSourceMongo(
+                db_credentials,
+                db_name_data,
+                split_name,
+                tuple([t]),
+                synapses),
+            SynapseTypeSource(synapse_types, t, synapse_type)
+        ) +
+        MergeProvider() +
+        RandomLocation(ensure_nonempty=synapses)
+
+        for t in synapse_types
+    )
+
     if neither_class:
         neither_sources = (
             (
@@ -115,7 +142,7 @@ def train_until(max_iteration,
 
         sources = sample_sources + (neither_sources,)
     else:
-        sources = sample_sources
+        sources = fanc_sources
 
 
 
